@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +14,9 @@ void aloca(produtos **pto, int tam);
 int verifica();
 void cadastro(produtos *pto);
 void consulta_produto(produtos *pto);
-void exclui_produto(produtos *pto);
+void consulta_produto_total(produtos *pto);
+void consulta_produto_parcial(produtos *pto);
+void deleta_produto(produtos *pto);
 void altera_produto(produtos *pto);
 
 int main() {
@@ -32,17 +35,18 @@ int main() {
                 system("pause");
                 break;
             case 2:
-            	consulta_produto(pto);
+                consulta_produto(pto);
+                break;
             case 3:
-              
+                deleta_produto(pto);
                 break;
             case 4:
-        		altera_produto(pto);
+                altera_produto(pto);
                 break;
         }
     } while (op != 5);
 
-    free(pto);  // Liberando a memória alocada
+    free(pto);  // Liberando a memoria alocada
     return 0;
 }
 
@@ -54,16 +58,16 @@ void aloca(produtos **pto, int tam) {
 }
 
 int verifica() {
-    FILE *fptr = fopen("estoque.bin", "r");
+    FILE *fptr = fopen("padaria.bin", "rb");
     if (fptr != NULL) {
-        // O arquivo existe, retornar o número de registros
-        fseek(fptr, 0, 2);  // Posiciona no fim do arquivo
+        // O arquivo existe, retornar o numero de registros
+        fseek(fptr, 0, SEEK_END);  // Posiciona no fim do arquivo
         long int tamanho = ftell(fptr);
         fclose(fptr);
         return tamanho / sizeof(produtos);
     } else {
-        // O arquivo não existe, criar o arquivo e retornar 0
-        fptr = fopen("estoque.bin", "wb");
+        // O arquivo nao existe, criar o arquivo e retornar 0
+        fptr = fopen("padaria.bin", "wb");
         if (fptr == NULL) {
             printf("Erro ao criar o arquivo.\n");
             exit(1);
@@ -77,9 +81,9 @@ void cadastro(produtos *pto) {
     int qreg, ultimo_reg;
     qreg = verifica();  // número de registros
     ultimo_reg = 0;
-    
+
     FILE *fptr;
-    if ((fptr = fopen("estoque.bin", "rb")) != NULL) {
+    if ((fptr = fopen("padaria.bin", "rb")) != NULL) {
         produtos p;
         while (fread(&p, sizeof(produtos), 1, fptr) == 1) {
             if (p.reg_prod > ultimo_reg) {
@@ -88,13 +92,42 @@ void cadastro(produtos *pto) {
         }
         fclose(fptr);
     }
-    
-    if (qreg == -1) {  // não há vago
-        pto->reg_prod = qreg + 1;
-    } else {  // achou vago
-        pto->reg_prod = ultimo_reg + 1;
+
+    // Procurar por um produto com preço -1
+    for (int i = 0; i < qreg; i++) {
+        if ((fptr = fopen("padaria.bin", "r+b")) == NULL) {
+            printf("Erro ao abrir o arquivo.\n");
+            exit(1);
+        }
+        fseek(fptr, i * sizeof(produtos), 0);
+        fread(pto, sizeof(produtos), 1, fptr);
+        if (pto->preco == -1) {  // Produto com preço -1 encontrado
+            pto->reg_prod = i + 1;  // Sobrescrever o produto existente
+
+            printf("\nRegistro: %i", pto->reg_prod);
+            printf("\nProduto: ");
+            fflush(stdin);
+            fgets(pto->produto, 20, stdin);
+            pto->produto[strcspn(pto->produto, "\n")] = '\0';  // removendo o caractere '\n' do final
+            printf("\nDescricao: ");
+            fgets(pto->descricao, 80, stdin);
+            pto->descricao[strcspn(pto->descricao, "\n")] = '\0';  // removendo o caractere '\n' do final
+            printf("\nPreco: ");
+            scanf("%f", &(pto->preco));
+            fflush(stdin);
+
+            // Escrever as alterações no arquivo
+            fseek(fptr, i * sizeof(produtos), 0);
+            fwrite(pto, sizeof(produtos), 1, fptr);
+            fclose(fptr);
+            return;
+        }
+        fclose(fptr);
     }
-    
+
+    // Se não houver produto com preço -1, adicionar um novo produto
+    pto->reg_prod = ultimo_reg + 1;
+
     printf("\nRegistro: %i", pto->reg_prod);
     printf("\nProduto: ");
     fflush(stdin);
@@ -107,7 +140,7 @@ void cadastro(produtos *pto) {
     scanf("%f", &(pto->preco));
     fflush(stdin);
 
-    if ((fptr = fopen("estoque.bin", "ab")) == NULL) {
+    if ((fptr = fopen("padaria.bin", "ab")) == NULL) {
         printf("Erro ao abrir o arquivo\n");
         exit(1);
     }
@@ -115,26 +148,69 @@ void cadastro(produtos *pto) {
     fclose(fptr);
 }
 
+
 void consulta_produto(produtos *pto) {
+    int op;
+    printf("\n[1] Consulta Total\n[2] Consulta Parcial\nOpcao: ");
+    scanf("%d", &op);
+    switch (op) {
+        case 1:
+            consulta_produto_total(pto);
+            break;
+        case 2:
+            consulta_produto_parcial(pto);
+            break;
+        default:
+            printf("\nOpcao invalida\n");
+            break;
+    }
+    system("pause");
+}
+
+void consulta_produto_total(produtos *pto) {
     int i, qreg;
     FILE *fptr = NULL;
     qreg = verifica();   //qtde de registros
     system("cls");
-    if ((fptr = fopen("estoque.bin", "rb")) == NULL)
+    if ((fptr = fopen("padaria.bin", "rb")) == NULL)
         printf("\nErro ao abrir o arquivo");
     else {
         for (i = 0; i < qreg; i++) {
             fseek(fptr, i * sizeof(produtos), 0);
             fread(pto, sizeof(produtos), 1, fptr);
-            printf("\nRegistro: %i\nProduto: %s\nDescricao: %s\nPreco: %.2f\n\n", pto->reg_prod, pto->produto, pto->descricao, pto->preco);
+            if (pto->preco >= 0) {  // Verificar se o produto não foi excluído
+                printf("\nRegistro: %i\nProduto: %s\nDescricao: %s\nPreco: %.2f\n\n", pto->reg_prod, pto->produto, pto->descricao, pto->preco);
+            }
         }
         fclose(fptr);
     }
-    system("pause");
 }
 
-void excluir_produto(produtos *pto)
- {
+void consulta_produto_parcial(produtos *pto) {
+    int i, qreg;
+    char tipo[20];
+    FILE *fptr = NULL;
+    qreg = verifica();   //qtde de registros
+    system("cls");
+    printf("\nDigite o tipo a ser consultado: ");
+    fflush(stdin);
+    fgets(tipo, 20, stdin);
+    tipo[strcspn(tipo, "\n")] = '\0';  // removendo o caractere '\n' do final
+    if ((fptr = fopen("padaria.bin", "rb")) == NULL)
+        printf("\nErro ao abrir o arquivo");
+    else {
+        for (i = 0; i < qreg; i++) {
+            fseek(fptr, i * sizeof(produtos), 0);
+            fread(pto, sizeof(produtos), 1, fptr);
+            if (pto->preco >= 0 && strcmp(pto->produto, tipo) == 0) {  // Verificar se o produto não foi excluído e se o tipo coincide
+                printf("\nRegistro: %i\nDescricao: %s\nPreco: %.2f\n\n", pto->reg_prod, pto->descricao, pto->preco);
+            }
+        }
+        fclose(fptr);
+    }
+}
+
+void deleta_produto(produtos *pto) {
     int reg_excluir, qreg, i;
     FILE *fptr;
 
@@ -142,7 +218,7 @@ void excluir_produto(produtos *pto)
     printf("Digite o número do registro do produto a ser excluído: ");
     scanf("%d", &reg_excluir);
 
-    if ((fptr = fopen("estoque.bin", "r+b")) == NULL) {
+    if ((fptr = fopen("padaria.bin", "r+b")) == NULL) {
         printf("Erro ao abrir o arquivo.\n");
         exit(1);
     }
@@ -150,7 +226,7 @@ void excluir_produto(produtos *pto)
     for (i = 0; i < qreg; i++) {
         fseek(fptr, i * sizeof(produtos), 0);
         fread(pto, sizeof(produtos), 1, fptr);
-        if (pto->reg_prod == reg_excluir) {
+        if (pto->reg_prod == reg_excluir && pto->preco >= 0) {  // Verificar se o produto não foi excluído
             // Movendo o ponteiro para a posição do registro a ser alterado
             fseek(fptr, i * sizeof(produtos), 0);
 
@@ -166,8 +242,7 @@ void excluir_produto(produtos *pto)
 }
 
 
-void altera_produto(produtos *pto) 
-{
+void altera_produto(produtos *pto) {
     int reg_alterar, qreg, i;
     FILE *fptr;
 
@@ -175,7 +250,7 @@ void altera_produto(produtos *pto)
     printf("Digite o número do registro do produto a ser alterado: ");
     scanf("%d", &reg_alterar);
 
-    if ((fptr = fopen("estoque.bin", "r+b")) == NULL) {
+    if ((fptr = fopen("padaria.bin", "r+b")) == NULL) {
         printf("Erro ao abrir o arquivo.\n");
         exit(1);
     }
@@ -183,25 +258,17 @@ void altera_produto(produtos *pto)
     for (i = 0; i < qreg; i++) {
         fseek(fptr, i * sizeof(produtos), 0);
         fread(pto, sizeof(produtos), 1, fptr);
-        if (pto->reg_prod == reg_alterar) {
+        if (pto->reg_prod == reg_alterar && pto->preco >= 0) {  // Verificar se o produto não foi excluído
             // Movendo o ponteiro para a posição do registro a ser alterado
             fseek(fptr, i * sizeof(produtos), 0);
 
-            // Solicitar novos valores para o produto
-            printf("\nNovo Produto: ");
-            fflush(stdin);
-            fgets(pto->produto, 20, stdin);
-            pto->produto[strcspn(pto->produto, "\n")] = '\0';  // removendo o caractere '\n' do final
-            printf("\nNova Descricao: ");
-            fgets(pto->descricao, 80, stdin);
-            pto->descricao[strcspn(pto->descricao, "\n")] = '\0';  // removendo o caractere '\n' do final
-            printf("\nNovo Preco: ");
+            printf("\nRegistro: %i", pto->reg_prod);
+            printf("\nPreço: ");
             scanf("%f", &(pto->preco));
             fflush(stdin);
 
             // Escrevendo as alterações no arquivo
             fwrite(pto, sizeof(produtos), 1, fptr);
-            printf("\nProduto alterado com sucesso.\n\n");
             break;
         }
     }
